@@ -79,7 +79,7 @@ int main(){
     // printf("%d",xyz0.size());   
 
     int mode;
-    bool is_write;
+    bool is_wri;
     std::string name;
     printf("file name:\n");
     std::cin >> name;
@@ -87,7 +87,7 @@ int main(){
     // asb.initialize();
     // asb.solve();
     printf("is_write, mode:\n");
-    std::cin >> is_write >> mode;
+    std::cin >> is_wri >> mode;
 
     if(!is_write){
         asb.opt_val(mode);
