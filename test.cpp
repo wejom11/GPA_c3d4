@@ -89,7 +89,7 @@ int main(){
     printf("is_write, mode:\n");
     std::cin >> is_wri >> mode;
 
-    if(!is_write){
+    if(!is_wri){
         asb.opt_val(mode);
     }
     else{
