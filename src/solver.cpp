@@ -1,6 +1,37 @@
 #include <stdio.h>
 #include "solver.h"
 
+void SparseMatrix::show(int row){
+    int i, j, k, tiscol, lstcol;
+
+    for(i = 0; i < row; i++){
+        printf("{");
+        lstcol = 1;
+        for(j = this->row_st[i]-1; j < this->row_st[i+1]-1; j++){
+            tiscol = this->col[j];
+            for(k = lstcol; k < tiscol; k++){
+                printf("%.2f, ", 0.);
+            }
+            if(tiscol == row){
+                printf("%.8f},", this->val[j]);
+            }
+            else{
+                printf("%.8f, ", this->val[j]);
+            }
+            lstcol = tiscol + 1;
+        }
+
+        for(k = lstcol - 1; k < row; k++){
+            if(k == row - 1){
+                printf("%.2f}, ",0.);
+            }
+            else{
+                printf("%.2f, ",0.);
+            }
+        }
+    }
+};
+
 void pardiso_cfg::initial(int &type){
     int i = 0;
     maxfct = 1;
@@ -10,6 +41,11 @@ void pardiso_cfg::initial(int &type){
         iparm[i] = 0;
     }
     if(type == 2){
+        iparm[0] = 1;
+        iparm[1] = 2;
+        iparm[9] = 13;
+    }
+    else if(type == 11 || type == 1){
         iparm[0] = 1;
         iparm[1] = 2;
         iparm[9] = 13;

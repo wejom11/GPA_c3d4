@@ -11,19 +11,23 @@ public:
 
     SparseMatrix(int mtype = 2){
         type = mtype;
-        val = NULL;
-        col = NULL;
-        row_st = NULL;
+        val = nullptr;
+        col = nullptr;
+        row_st = nullptr;
     }
 
     void del(){
-        delete[] val; val = NULL;
-        delete[] col; col = NULL;
-        delete[] row_st; row_st = NULL;
+        delete[] val; val = nullptr;
+        delete[] col; col = nullptr;
+        delete[] row_st; row_st = nullptr;
     }
 
+    /// @brief show this SparseMatrix
+    /// @param row total rows of this matrix
+    void show(int row);
+
     ~SparseMatrix(){
-        if(!(val == NULL && col == NULL && row_st == NULL)){
+        if(!(val == nullptr && col == nullptr && row_st == nullptr)){
             this -> del();
         }
     }

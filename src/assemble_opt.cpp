@@ -8,7 +8,7 @@
 #include "assemble_opt.h"
 
 void asb_opt_manager::init_KE(int* invcolume, int* invcolume_E, bool is_write){
-    int dof = 3 * xyz_coord.size();
+    int dof = 3 * xy_coord.size();
     int opt_var = Mater_lib.size();
     int now_p = 1;
     int to_ele = elements.size();
@@ -88,7 +88,7 @@ void asb_opt_manager::asb_KE(c3d4 &ele, int* invcol, int* invcol_E){
     double K[12][12];
     double KdE[12][12];
     int ROW_I, ROW_E;
-    int dof = 3 * xyz_coord.size();
+    int dof = 3 * xy_coord.size();
     ele.getK_e(K,KdE);
 
     if((K_mat.type == 2 || K_mat.type == -2) && (invcol != nullptr && invcol_E != nullptr)){
@@ -195,7 +195,7 @@ void asb_opt_manager::initialize(int mode){
 };
 
 void asb_opt_manager::solve(bool &alloc_err, bool get_udE){
-    const int dof = (fnode_list.size() != 0) ? fnode_list.size() : 3*xyz_coord.size();
+    const int dof = (fnode_list.size() != 0) ? fnode_list.size() : 3*xy_coord.size();
     int optvar_num = Mater_lib.size();
     int* row_fst = nullptr;
     int* row_lst = nullptr;
@@ -312,7 +312,7 @@ void asb_opt_manager::solve(bool &alloc_err, bool get_udE){
 };
 
 void asb_opt_manager::sub_mat_vec(bool F){
-    // int subsize = (fnode_list.size() != 0) ? fnode_list.size() : 3*xyz_coord.size();
+    // int subsize = (fnode_list.size() != 0) ? fnode_list.size() : 3*xy_coord.size();
     // int opt_p = 0;
     // int total_opt = Mater_lib.size();
     // double val = 0.0;
@@ -382,13 +382,13 @@ void asb_opt_manager::sub_measure(){
 
     int moni_size = probe_list.size();
     int optvar_num = Mater_lib.size();
-    int dof = 3 * xyz_coord.size();
+    int dof = 3 * xy_coord.size();
     int ROW_I = 0, ROW_J = 0;
     wk_vec = new double[moni_size];
     wk_mat = new double[moni_size * optvar_num];
 
     if(fnode_list.size() != 0){
-        // rfnode_list.resize(3 * xyz_coord.size(), -1);
+        // rfnode_list.resize(3 * xy_coord.size(), -1);
         // int i = 0;
         // for(std::vector<int>::iterator itp = fnode_list.begin(); itp != fnode_list.end(); itp++){
         //     rfnode_list.at(*itp) = i;
@@ -526,7 +526,7 @@ void asb_opt_manager::addboundry(int mode){
             }
         }
 
-        for(int i = 0; i < 3*xyz_coord.size(); i++){
+        for(int i = 0; i < 3*xy_coord.size(); i++){
             fnode_list.push_back(i);
         }
         for(std::vector<std::pair<int,double>>::reverse_iterator itsub = sub_list.rbegin(); itsub < sub_list.rend(); ++itsub){
@@ -633,7 +633,7 @@ void asb_opt_manager::opt_val(int method){
     else if(method == 2){ // Lagrange Multiplier Method
         // this->initialize(1);
         // int fsize = fnode_list.size();
-        // int dof = (fsize != 0) ? fsize : 3*xyz_coord.size();
+        // int dof = (fsize != 0) ? fsize : 3*xy_coord.size();
         // int optvar_num = Mater_lib.size();
 
         // bool is_done = false;
@@ -808,7 +808,7 @@ void asb_opt_manager::wirte(std::ofstream &file_stream){
         }
     }
     else{
-        for(i = 0; i < 3*xyz_coord.size(); i++){
+        for(i = 0; i < 3*xy_coord.size(); i++){
             // snprintf(buffer, sizeof(buffer),"%d, %d, %.10f\n",i/3 + 1,i % 3 + 1,*itu);
             file_stream << i/3 + 1 <<", " << i % 3 + 1 <<", " << uvw_ans[i] << "\n";
         }
@@ -826,7 +826,7 @@ void asb_opt_manager::wirte(std::ofstream &file_stream, const std::vector<int> &
     file_stream.precision(10);
     file_stream << "*measure\n";
     if(fsize != 0){
-        rfnode_list.resize(3 * xyz_coord.size(), -1);
+        rfnode_list.resize(3 * xy_coord.size(), -1);
         i = 0;
         for(std::vector<int>::iterator itp = fnode_list.begin(); itp != fnode_list.end(); itp++){
             rfnode_list.at(*itp) = i;
@@ -852,7 +852,7 @@ void asb_opt_manager::wirte(std::ofstream &file_stream, const std::vector<int> &
 }
 
 void asb_opt_manager::init_KE_symbolic(){
-    const int dof = xyz_coord.size();
+    const int dof = xy_coord.size();
     const int opt_var = Mater_lib.size();
     int nznv = 0;
     int dignzn = 0;

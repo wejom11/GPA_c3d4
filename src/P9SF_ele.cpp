@@ -468,13 +468,14 @@ void P9SF::get_K_f(double K[31][31], const double N[9 * 9], const double UV_fld[
                     for(n = 0; n < 2; n++){
                         if(m == n){
                             K[4+J3+m][4+K3+n] += (rho * N[ROW_N + j] * (N[ROW_N + k]*UVdx_fld[I4 + 3*m] + UV_fld[I2]*Ndx[ROW_Ndx + 2*k] +
-                                        UV_fld[I2 + 1] * Ndx[ROW_Ndx + 2*k + 1])) * weight[i] * Det[i];
+                                                  UV_fld[I2 + 1] * Ndx[ROW_Ndx + 2*k + 1]) + vis*(2*Ndx[ROW_Ndx + 2*k + m]*Ndx[ROW_Ndx + 2*j + m] + 
+                                                  Ndx[ROW_Ndx + 2*k + 1 - m]*Ndx[ROW_Ndx + 2*j + 1 - m])) * weight[i] * Det[i];
                         }
                         else{
-                            K[4+J3+m][4+K3+n] += (rho * N[ROW_N + j] * N[ROW_N + k] * UVdx_fld[I4 + m + 1]) * weight[i] * Det[i];
+                            K[4+J3+m][4+K3+n] += (rho * N[ROW_N + j] * N[ROW_N + k] * UVdx_fld[I4 + m + 1] + 
+                                                  vis*Ndx[ROW_Ndx + 2*j + n]*Ndx[ROW_Ndx + 2*k + 1-n]) * weight[i] * Det[i];
                         }
                     }
-
                 }
 
                 K[J3+6][K3+4] += (N[ROW_N + j] * N[ROW_N + k] * Tdx_fld[I2]) * weight[i] * Det[i];

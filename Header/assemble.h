@@ -5,71 +5,59 @@
 #include <string.h>
 #include <mkl.h>
 #include "solver.h"
-#include "read.h"
-#include "c3d4_ele.h"
+#include "P9SF_ele.h"
 
 class asb_manager
 {
 public:
     // problem information
-    std::string inp_file_name;
+    // std::string inp_file_name;
     // work matrix
     SparseMatrix K_mat;
+    double* Fint;
     double* Fout;
     // work information
-    std::vector<c3d4> elements;
-    std::vector<double*> xyz_coord;
-    std::vector<set> Nset;
-    std::vector<set> ELset;
+    std::vector<P9SF> elements;
+    double* xy_coord;
     std::vector<std::pair<std::string,std::string>> mat_map;
     std::vector<Material> Mater_lib;
-    std::vector<Boundary<std::string,double,int>> bound_set_map;
-    std::vector<Boundary<set*,double,int>> bound_set;
-    std::vector<Boundary<int,double,int>> bound_node;
+    int typenode_num[3];
 
-    std::vector<Boundary<std::string,double,int>> load_set_map;
-    std::vector<Boundary<set*,double,int>> load_set;
-    std::vector<Boundary<int,double,int>> load_node;
-
-    std::vector<Boundary<std::string,double,double>> dload_set_map;
-    std::vector<Boundary<set*,double,double>> dload_set;
-    std::vector<Boundary<int,double,double>> dload_ele;
+    std::vector<int> inlet_node;
+    std::vector<int> outlet_node;
+    std::vector<int> wall_node;
     // solved answer
-    double* uvw_ans;
+    double* uvtp_ans;
 
     std::vector<std::pair<int,double>> sub_list;
-    std::vector<int> fnode_list;
-    std::vector<int> probe_list;
-    std::vector<double> u_real_probe;
 
 // public:
 
-    asb_manager(std::string file_name){
-        inp_file_name = file_name;
-        uvw_ans = NULL;
-        Fout = NULL;
+    asb_manager(/* std::string file_name */){
+        // inp_file_name = file_name;
+        xy_coord = nullptr;
+        Fint = nullptr;
+        uvtp_ans = nullptr;
+        Fout = nullptr;
     }
 
     /// @brief initial elements informations
     void init_ele();
 
     /// @brief initial the boudary conditions
-    void init_bnd();
+    // void init_bnd();
 
     /// @brief initial K_{ij}
-    void init_K();
+    void init_KF();
 
     /// @brief initial work matrix (K_{ij}, F_i, ...)
     void initialize(int mode = 1);
 
-    /// @brief read *.inp file
-    /// @param file_stream *.inp file stream
-    void read_manager(std::ifstream &file_stream);
-
     /// @brief get the stifness matrix of the element and assemble
     /// @param ele the c3d4 type element
     /// @param invcol the (i,j)th element's Stiffness Matrix cell position in value array or colume array
-    void asb_K(c3d4 &ele, int* invcol);
+    void asb_KF_f(P9SF &ele, int* invcol = nullptr);
+    void asb_KF_s(P9SF &ele, int* invcol = nullptr);
 
     void getFout();
 
@@ -77,32 +65,33 @@ public:
     /// @param name Nset's or ELset's name
     /// @param mode Fine Nset -> "N" or ELset -> "EL", default "N"
     /// @return set's position (set*)
-    set* whereset(const std::string &name, const char* mode);
+    // set* whereset(const std::string &name, const char* mode);
 
     /// @brief find the Material's position whose name is ${name}
     /// @param name Material's name
     /// @return Material's position (Material*)
-    Material* whereset(const std::string &name);
+    // Material* whereset(const std::string &name);
+
+    /// @brief get the row/col of this point's U/V/T/P value in the global stiffness matrix
+    /// @param nodetag point tag
+    /// @param uvtp 0-U value; 1-V value; 2-T value; 3-P value
+    /// @return row/col
+    int wherend(int nodetag, int uvtp);
 
     /// @brief modify the K_{ij} to add the boundary conditions
-    /// @param mode method to add boundary conditions, default 1
-    /// 1 - by multiple large numbers; 2 - direct substitution;
-    void addboundry(int mode = 1);
+    void addboundry();
 
     void solve();
-
-    void sub_mat_vec(bool F = true);
 
     /// @brief initial the symbolic Stiffness
     void init_K_symbolic();
 
     ~asb_manager(){
-        for(int i = 0; i < xyz_coord.size(); i++){
-            delete[] xyz_coord.at(i);
-        }
+        delete[] xy_coord; xy_coord = nullptr;
         K_mat.del();
-        delete[] Fout; Fout = NULL;
-        delete[] uvw_ans; uvw_ans = NULL;
+        delete[] Fout; Fout = nullptr;
+        delete[] uvtp_ans; uvtp_ans = nullptr;
+        delete[] Fint; Fint = nullptr;
     };
 };
 
