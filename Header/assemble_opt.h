@@ -3,6 +3,8 @@
 #include <vector>
 #include <mkl.h>
 #include <mkl_spblas.h>
+#include <GFE_API.h>
+#include <GFE_Struct/GFE_Outp.h>
 #include "assemble.h"
 #include "solver.h"
 
@@ -59,6 +61,20 @@ public:
 
     /// @brief initial the symbolic Stiffness and the \frac{\partial K_{ij}}{\partial E_k}
     void init_KE_symbolic();
+
+    /// @brief write answer to *.db file
+    void write_db();
+
+    /// @brief write geometry information to *.db file
+    /// @param db .db file io
+    /// @return if done, return true.
+    bool write_geo2db(std::shared_ptr<GFE::DB> db);
+
+    /// @brief write displacement information to *.db file
+    /// @param db .db file io
+    /// @param frame frame number
+    /// @return if done, return true.
+    bool write_disp2db(std::shared_ptr<GFE::DB> db, int frame);
 
     ~asb_opt_manager(){
         delete[] udE; udE = nullptr;

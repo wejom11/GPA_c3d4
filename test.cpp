@@ -78,16 +78,16 @@ int main(){
     // xyz0.erase(xyz0.begin());
     // printf("%d",xyz0.size());   
 
-    int mode;
+    int mode = 1;
     bool is_wri;
     std::string name;
     printf("file name:\n");
     std::cin >> name;
-    asb_opt_manager asb("E:/personal data/Summer internship/work_dir/nonliner_FEM_basic/assemble/"+name);
+    asb_opt_manager asb("../example/"+name);
     // asb.initialize();
     // asb.solve();
-    printf("is_write, mode:\n");
-    std::cin >> is_wri >> mode;
+    printf("is_write:\n");
+    std::cin >> is_wri;
 
     if(!is_wri){
         asb.opt_val(mode);
@@ -95,12 +95,12 @@ int main(){
     else{
         bool err;
         std::vector<int> nl;
-        std::ifstream vec_file("E:/personal data/Summer internship/work_dir/nonliner_FEM_basic/assemble/c++/node_list.txt");
+        std::ifstream vec_file("../example/node_list.txt");
         read_nodelist(vec_file, nl);
 
         asb.initialize(mode);
         std::ofstream out_inp_file;
-        out_inp_file.open("../vol_ans.inp",std::ios::app);
+        out_inp_file.open("../example/vol_ans.inp",std::ios::app);
         asb.solve(err);
         if(err){
             printf("Excessive memory");

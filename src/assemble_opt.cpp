@@ -3,6 +3,9 @@
 #include <vector>
 #include <mkl.h>
 #include <mkl_spblas.h>
+#include <GFE_API.h>
+#include <GFE_Struct/GFE_Outp.h>
+#include <memory.h>
 #include "assemble.h"
 #include "solver.h"
 #include "assemble_opt.h"
@@ -582,9 +585,28 @@ void asb_opt_manager::opt_val(int method){
         double normf = 0.0;
         double val = 0.0;
         int iter_time = 0;
+
+        auto db_file = GFE::open("../example/test.db", true);
+        GFE::clearModel(db_file);
+        GFE::clearOutput(db_file);
+        write_geo2db(db_file);
+        {
+            GFE::vector<GFE::data_t> node_U, node_V, node_W;
+            node_U.resize(xyz_coord.size(), 0);
+            node_V.resize(xyz_coord.size(), 0);
+            node_W.resize(xyz_coord.size(), 0);
+            GFE::string nset = "AllNodes";
+
+            GFE::FO::SetData(db_file, 0, "U U1", nset, node_U);
+            GFE::FO::SetData(db_file, 0, "U U2", nset, node_V);
+            GFE::FO::SetData(db_file, 0, "U U3", nset, node_W);
+            GFE::FO::AddFrame(db_file, 0, true);
+        }
+
         while(!is_done && iter_time < max_iteration){
             normf = 0.0;
             this->solve(alloc_err, true);
+            this->write_disp2db(db_file, iter_time+1);
             this->sub_measure();
 
             for(int i = 0; i < dof; i++){
@@ -1051,8 +1073,147 @@ void asb_opt_manager::init_KE_symbolic(){
         }
     }
     else{
-        printf("matrix type %i haven't supported yet",K_mat.type);
+        printf("matrix type %i haven't supported yet", K_mat.type);
     }
     delete[] syb_K_mat;
     delete[] syb_KdE_mat;
+}
+
+void asb_opt_manager::write_db(){
+    using namespace GFE;
+
+    auto db_file = open("../example/test.db", true);
+    clearModel(db_file);
+    clearOutput(db_file);
+
+    write_geo2db(db_file);
+
+    {
+        vector<data_t> node_U, node_V, node_W;
+        node_U.resize(xyz_coord.size(), 0);
+        node_V.resize(xyz_coord.size(), 0);
+        node_W.resize(xyz_coord.size(), 0);
+        string nset = "AllNodes";
+
+        FO::SetData(db_file, 0, "U U1", nset, node_U);
+        FO::SetData(db_file, 0, "U U2", nset, node_V);
+        FO::SetData(db_file, 0, "U U3", nset, node_W);
+        FO::AddFrame(db_file, 0, true);
+    }
+}
+
+bool asb_opt_manager::write_geo2db(std::shared_ptr<GFE::DB> db){
+    using namespace GFE;
+
+    int i = 0;
+
+    {
+        vector<data_t> coord;
+        vector<int> label;
+        coord.resize(3 * xyz_coord.size());
+        label.resize(xyz_coord.size());
+        
+        for(i = 0; i < xyz_coord.size(); i++){
+            coord.at(3 * i) = xyz_coord.at(i)[0];
+            coord.at(3 * i + 1) = xyz_coord.at(i)[1];
+            coord.at(3 * i + 2) = xyz_coord.at(i)[2];
+
+            label.at(i) = i + 1;
+        }
+        
+        setNode(db, coord);
+        addNodeAttribute(db, "Label", label);
+    }
+
+    {
+        vector<int> ele_node, ele_label, ele_type, ele_subtype;
+        int elenum = elements.size();
+        ele_node.resize(4 * elenum);
+        ele_label.resize(elenum);
+        ele_type.resize(elenum, CT_TETRA);
+        ele_subtype.resize(elenum, getElementSubTypeId("C3D4"));
+        std::array<int, CT_NUM> num_ele_type = {0, 0, 0, 0, elenum, 0, 0, 0, 0};
+
+        for(i = 0; i < elements.size(); i++){
+            ele_node.at(4*i) = elements.at(i).Nodetag.at(0) - 1;
+            ele_node.at(4*i + 1) = elements.at(i).Nodetag.at(1) - 1;
+            ele_node.at(4*i + 2) = elements.at(i).Nodetag.at(2) - 1;
+            ele_node.at(4*i + 3) = elements.at(i).Nodetag.at(3) - 1;
+
+            ele_label.at(i) = i + 1;
+        }
+
+        setElement(db, ele_node, num_ele_type);
+        addElementAttribute(db, "Label", ele_label);
+        addElementAttribute(db, "Type", ele_type);
+        addElementAttribute(db, "SubType", ele_subtype);
+    }
+
+    {
+        NodeSet an;
+        an.name = "AllNodes";
+        an.nodes.resize(xyz_coord.size());
+        for(i = 0; i < xyz_coord.size(); i++){
+            an.nodes.at(i) = i;
+        }
+        addNodeSet(db, an);
+    }
+
+    {
+        ElementSet ae;
+        ae.name = "AllElements";
+        ae.elements.resize(elements.size());
+        for(i = 0; i < elements.size(); i++){
+            ae.elements.at(i) = i;
+        }
+        addElementSet(db, ae);
+    }
+
+    {
+        GFE::Material mat;
+        mat.name = "Mat-1";
+        addMaterial(db, mat);
+
+        vector<int> ele_mat;
+        ele_mat.resize(elements.size(), 0);
+        addElementAttribute(db, "Material", ele_mat);
+    }
+
+    {
+        PropertySolid prop;
+        prop.name = "Prop-1";
+        prop.id = 0;
+        prop.elset_name = "AllElements";
+        addProperty(db, &prop);
+
+        vector<int> ele_prop = {0};
+        addElementAttribute(db, "Property", ele_prop);
+    }
+
+    return true;
+}
+
+bool asb_opt_manager::write_disp2db(std::shared_ptr<GFE::DB> db, int frame){
+    using namespace GFE;
+    int i = 0;
+
+    {
+        vector<data_t> node_U, node_V, node_W;
+        node_U.resize(xyz_coord.size());
+        node_V.resize(xyz_coord.size());
+        node_W.resize(xyz_coord.size());
+        string nset = "AllNodes";
+        for(i = 0; i < xyz_coord.size(); i++){
+            node_U.at(i) = uvw_ans[3 * i];
+            node_V.at(i) = uvw_ans[3 * i + 1];
+            node_W.at(i) = uvw_ans[3 * i + 2];
+        }
+
+        FO::SetData(db, frame, "U U1", nset, node_U);
+        FO::SetData(db, frame, "U U2", nset, node_V);
+        FO::SetData(db, frame, "U U3", nset, node_W);
+        FO::AddFrame(db, 1.0 * frame, true);
+    }
+
+    return true;
 }
