@@ -83,7 +83,7 @@ int main(){
     std::string name;
     printf("file name:\n");
     std::cin >> name;
-    asb_opt_manager asb("../example/"+name);
+    asb_opt_manager asb("E:/personal data/Summer internship/work_dir/nonliner_FEM_basic/assemble/c++/example/"+name);
     // asb.initialize();
     // asb.solve();
     printf("is_write:\n");

@@ -3,8 +3,8 @@
 #include <vector>
 #include <mkl.h>
 #include <mkl_spblas.h>
-#include <GFE_API.h>
-#include <GFE_Struct/GFE_Outp.h>
+// #include <GFE_API.h>
+// #include <GFE_Struct/GFE_Outp.h>
 #include <memory.h>
 #include "assemble.h"
 #include "solver.h"
@@ -552,24 +552,37 @@ void asb_opt_manager::addboundry(int mode){
     }
 }
 
-void asb_opt_manager::opt_val(int method){
+void asb_opt_manager::opt_val(int method, std::string option ,double la){
     int max_iteration = 50;
     double start = clock();
+    double eps = 1E-10;
+    bool is_ada = false;
+    bool given_dla = false;
+    if(!_strcmpi(option.data(), "Adaptive")){
+        is_ada = true;
+    }
+    given_dla = la > 0 ? true : false;
 
     if(method == 1){ // Gauss-Newton
         this->initialize(1);
+        bool is_back = false;
         int dof = probe_list.size();
         int optvar_num = Mater_lib.size();
+        int la_p = 1, la_true = 1, la_false = 1;
+        double dla = given_dla ? la : 0.;
+        double lambda;
         int* ipiv = nullptr;
         double* FE0it = nullptr;
         double* fdE0 = nullptr;
         double* JTJ = nullptr;
+        double* E_his = nullptr;
         //allocate memory
         try{
             ipiv = new int[optvar_num] {0};
             FE0it = new double[optvar_num] {0};
             fdE0 = new double[dof] {0};
             JTJ = new double[optvar_num * optvar_num] {0};
+            E_his = new double[optvar_num]{0};
         }
         catch(const std::bad_alloc& e){
             std::cerr << e.what() << '\n';
@@ -577,43 +590,109 @@ void asb_opt_manager::opt_val(int method){
             delete[] FE0it; FE0it = nullptr;
             delete[] fdE0; fdE0 = nullptr;
             delete[] JTJ; JTJ = nullptr;
+            delete[] E_his; E_his = nullptr;
         }
         if(ipiv == nullptr || FE0it == nullptr || fdE0 == nullptr || JTJ == nullptr){return;}
 
         bool is_done = false;
         bool alloc_err = false;
-        double normf = 0.0;
+        double normf = 0.0, normf_his = 0.0;
         double val = 0.0;
         int iter_time = 0;
 
-        auto db_file = GFE::open("../example/test.db", true);
-        GFE::clearModel(db_file);
-        GFE::clearOutput(db_file);
-        write_geo2db(db_file);
-        {
-            GFE::vector<GFE::data_t> node_U, node_V, node_W;
-            node_U.resize(xyz_coord.size(), 0);
-            node_V.resize(xyz_coord.size(), 0);
-            node_W.resize(xyz_coord.size(), 0);
-            GFE::string nset = "AllNodes";
+        // auto db_file = GFE::open("../example/test.db", true);
+        // GFE::clearModel(db_file);
+        // GFE::clearOutput(db_file);
+        // write_geo2db(db_file);
+        // {
+        //     GFE::vector<GFE::data_t> node_U, node_V, node_W;
+        //     node_U.resize(xyz_coord.size(), 0);
+        //     node_V.resize(xyz_coord.size(), 0);
+        //     node_W.resize(xyz_coord.size(), 0);
+        //     GFE::string nset = "AllNodes";
 
-            GFE::FO::SetData(db_file, 0, "U U1", nset, node_U);
-            GFE::FO::SetData(db_file, 0, "U U2", nset, node_V);
-            GFE::FO::SetData(db_file, 0, "U U3", nset, node_W);
-            GFE::FO::AddFrame(db_file, 0, true);
-        }
+        //     GFE::FO::SetData(db_file, 0, "U U1", nset, node_U);
+        //     GFE::FO::SetData(db_file, 0, "U U2", nset, node_V);
+        //     GFE::FO::SetData(db_file, 0, "U U3", nset, node_W);
+        //     GFE::FO::AddFrame(db_file, 0, true);
+        // }
 
         while(!is_done && iter_time < max_iteration){
             normf = 0.0;
+            this->init_KE();
+            // this->sub_mat_vec(false);
+            this->addboundry(1);
             this->solve(alloc_err, true);
-            this->write_disp2db(db_file, iter_time+1);
+            // this->write_disp2db(db_file, iter_time+1);
             this->sub_measure();
 
             for(int i = 0; i < dof; i++){
                 fdE0[i] = uvw_ans[i] - u_real_probe.at(i);
                 normf += fdE0[i] * fdE0[i];
             }
-            if(normf < 1e-12){
+            if(!is_back && iter_time > 0 && normf > normf_his + eps){
+                for(int i = 0; i < optvar_num; i++){
+                    Mater_lib.at(i).E = E_his[Mater_lib.at(i).where];
+                }
+                la_false = la_p;
+                if(la_true - la_false > 1){
+                    la_p = (la_true + la_false) / 2;
+                }
+                else if(la_true - la_false == 1){
+                    la_p = la_true;
+                }
+                else{
+                    la_p *= 2;
+                }
+                is_back = true;
+                continue;
+            }
+            else if(!is_back && iter_time > 0 && abs(normf - normf_his) <= eps){
+                if(la_p < la_true){
+                    for(int i = 0; i < optvar_num; i++){
+                        Mater_lib.at(i).E = E_his[Mater_lib.at(i).where];
+                    }
+                    la_p = (la_p + la_true + 1) / 2;
+                    is_back = true;
+                    continue;
+                }
+                else if(la_p > la_true && la_p <= 1024){
+                    la_p *= 2;
+                }
+                else{
+                    printf("iteration done\n");
+                    for(std::vector<Material>::iterator itE = Mater_lib.begin(); itE != Mater_lib.end(); itE++){
+                        printf("%.2f ",itE->E);
+                    }
+                    printf("\n");
+                    break;
+                }
+            }
+            else if(!is_back && iter_time > 0 && normf < normf_his - eps){
+                la_true = la_p;
+                if(la_true - la_false > 1){
+                    la_p = (la_true + la_false) / 2;
+                    for(int i = 0; i < optvar_num; i++){
+                        Mater_lib.at(i).E = E_his[Mater_lib.at(i).where];
+                    }
+                    is_back = true;
+                    continue;
+                }
+                else{
+                    la_false = 0;
+                    la_true = 1;
+                }
+            }
+
+            if(!is_back){
+                printf("write to his\n");
+                normf_his = normf;
+                for(int i = 0; i < optvar_num; i++){
+                    E_his[Mater_lib.at(i).where] = Mater_lib.at(i).E;
+                }
+            }
+
+            if(normf < 1e-10){
                 is_done = true;
                 for(std::vector<Material>::iterator itE = Mater_lib.begin(); itE != Mater_lib.end(); itE++){
                     printf("%.2f ",itE->E);
@@ -626,23 +705,33 @@ void asb_opt_manager::opt_val(int method){
                             udE, dof, 0, JTJ, optvar_num);
                 // calculated {J^T fdE0}
                 cblas_dgemv(CblasRowMajor, CblasNoTrans, optvar_num, dof, 1, udE, dof, fdE0, 1, 0, FE0it, 1);
-                // calculated E_{n+1}
+                // modified {J^T J}
+                if(iter_time == 0 && !given_dla){
+                    double TrM = 0.;
+                    for(int j = 0; j < optvar_num; j++){
+                        TrM += JTJ[j * optvar_num + j];
+                    }
+                    dla = TrM / optvar_num / 100000;
+                }
+                lambda = (la_p - 1) * dla;
+                for(int j = 0; j < optvar_num; j++){
+                    JTJ[j * optvar_num + j] += lambda;
+                }
+                // calculated E_{n+1}                
                 LAPACKE_dgetrf(LAPACK_ROW_MAJOR, optvar_num, optvar_num, JTJ, optvar_num, ipiv);
                 LAPACKE_dgetrs(LAPACK_ROW_MAJOR, 'N', optvar_num, 1, JTJ, optvar_num, ipiv, FE0it, 1);
 
-                printf("%.8f \n",normf);
+                printf("%.15f \n",normf);
+                printf("current Lambda: %.8f\n", lambda);
                 for(std::vector<Material>::iterator itE = Mater_lib.begin(); itE != Mater_lib.end(); itE++){
                     val = itE->E - FE0it[itE->where];
                     itE->E = (val > 100.0) ? val : 100;
                     printf("%.2f ",itE->E);
                 }
                 printf("\n");
-
-                this->init_KE();
-                // this->sub_mat_vec(false);
-                this->addboundry(1);
             }
             iter_time ++;
+            is_back = false;
             delete[] uvw_ans; uvw_ans = nullptr;
             delete[] udE; udE = nullptr;
         }
@@ -651,6 +740,7 @@ void asb_opt_manager::opt_val(int method){
         delete[] JTJ; JTJ = nullptr;
         delete[] ipiv; ipiv = nullptr;
         delete[] FE0it; FE0it = nullptr;
+        delete[] E_his; E_his = nullptr;
     }
     else if(method == 2){ // Lagrange Multiplier Method
         // this->initialize(1);
@@ -1079,141 +1169,141 @@ void asb_opt_manager::init_KE_symbolic(){
     delete[] syb_KdE_mat;
 }
 
-void asb_opt_manager::write_db(){
-    using namespace GFE;
+// void asb_opt_manager::write_db(){
+//     using namespace GFE;
 
-    auto db_file = open("../example/test.db", true);
-    clearModel(db_file);
-    clearOutput(db_file);
+//     auto db_file = open("../example/test.db", true);
+//     clearModel(db_file);
+//     clearOutput(db_file);
 
-    write_geo2db(db_file);
+//     write_geo2db(db_file);
 
-    {
-        vector<data_t> node_U, node_V, node_W;
-        node_U.resize(xyz_coord.size(), 0);
-        node_V.resize(xyz_coord.size(), 0);
-        node_W.resize(xyz_coord.size(), 0);
-        string nset = "AllNodes";
+//     {
+//         vector<data_t> node_U, node_V, node_W;
+//         node_U.resize(xyz_coord.size(), 0);
+//         node_V.resize(xyz_coord.size(), 0);
+//         node_W.resize(xyz_coord.size(), 0);
+//         string nset = "AllNodes";
 
-        FO::SetData(db_file, 0, "U U1", nset, node_U);
-        FO::SetData(db_file, 0, "U U2", nset, node_V);
-        FO::SetData(db_file, 0, "U U3", nset, node_W);
-        FO::AddFrame(db_file, 0, true);
-    }
-}
+//         FO::SetData(db_file, 0, "U U1", nset, node_U);
+//         FO::SetData(db_file, 0, "U U2", nset, node_V);
+//         FO::SetData(db_file, 0, "U U3", nset, node_W);
+//         FO::AddFrame(db_file, 0, true);
+//     }
+// }
 
-bool asb_opt_manager::write_geo2db(std::shared_ptr<GFE::DB> db){
-    using namespace GFE;
+// bool asb_opt_manager::write_geo2db(std::shared_ptr<GFE::DB> db){
+//     using namespace GFE;
 
-    int i = 0;
+//     int i = 0;
 
-    {
-        vector<data_t> coord;
-        vector<int> label;
-        coord.resize(3 * xyz_coord.size());
-        label.resize(xyz_coord.size());
+//     {
+//         vector<data_t> coord;
+//         vector<int> label;
+//         coord.resize(3 * xyz_coord.size());
+//         label.resize(xyz_coord.size());
         
-        for(i = 0; i < xyz_coord.size(); i++){
-            coord.at(3 * i) = xyz_coord.at(i)[0];
-            coord.at(3 * i + 1) = xyz_coord.at(i)[1];
-            coord.at(3 * i + 2) = xyz_coord.at(i)[2];
+//         for(i = 0; i < xyz_coord.size(); i++){
+//             coord.at(3 * i) = xyz_coord.at(i)[0];
+//             coord.at(3 * i + 1) = xyz_coord.at(i)[1];
+//             coord.at(3 * i + 2) = xyz_coord.at(i)[2];
 
-            label.at(i) = i + 1;
-        }
+//             label.at(i) = i + 1;
+//         }
         
-        setNode(db, coord);
-        addNodeAttribute(db, "Label", label);
-    }
+//         setNode(db, coord);
+//         addNodeAttribute(db, "Label", label);
+//     }
 
-    {
-        vector<int> ele_node, ele_label, ele_type, ele_subtype;
-        int elenum = elements.size();
-        ele_node.resize(4 * elenum);
-        ele_label.resize(elenum);
-        ele_type.resize(elenum, CT_TETRA);
-        ele_subtype.resize(elenum, getElementSubTypeId("C3D4"));
-        std::array<int, CT_NUM> num_ele_type = {0, 0, 0, 0, elenum, 0, 0, 0, 0};
+//     {
+//         vector<int> ele_node, ele_label, ele_type, ele_subtype;
+//         int elenum = elements.size();
+//         ele_node.resize(4 * elenum);
+//         ele_label.resize(elenum);
+//         ele_type.resize(elenum, CT_TETRA);
+//         ele_subtype.resize(elenum, getElementSubTypeId("C3D4"));
+//         std::array<int, CT_NUM> num_ele_type = {0, 0, 0, 0, elenum, 0, 0, 0, 0};
 
-        for(i = 0; i < elements.size(); i++){
-            ele_node.at(4*i) = elements.at(i).Nodetag.at(0) - 1;
-            ele_node.at(4*i + 1) = elements.at(i).Nodetag.at(1) - 1;
-            ele_node.at(4*i + 2) = elements.at(i).Nodetag.at(2) - 1;
-            ele_node.at(4*i + 3) = elements.at(i).Nodetag.at(3) - 1;
+//         for(i = 0; i < elements.size(); i++){
+//             ele_node.at(4*i) = elements.at(i).Nodetag.at(0) - 1;
+//             ele_node.at(4*i + 1) = elements.at(i).Nodetag.at(1) - 1;
+//             ele_node.at(4*i + 2) = elements.at(i).Nodetag.at(2) - 1;
+//             ele_node.at(4*i + 3) = elements.at(i).Nodetag.at(3) - 1;
 
-            ele_label.at(i) = i + 1;
-        }
+//             ele_label.at(i) = i + 1;
+//         }
 
-        setElement(db, ele_node, num_ele_type);
-        addElementAttribute(db, "Label", ele_label);
-        addElementAttribute(db, "Type", ele_type);
-        addElementAttribute(db, "SubType", ele_subtype);
-    }
+//         setElement(db, ele_node, num_ele_type);
+//         addElementAttribute(db, "Label", ele_label);
+//         addElementAttribute(db, "Type", ele_type);
+//         addElementAttribute(db, "SubType", ele_subtype);
+//     }
 
-    {
-        NodeSet an;
-        an.name = "AllNodes";
-        an.nodes.resize(xyz_coord.size());
-        for(i = 0; i < xyz_coord.size(); i++){
-            an.nodes.at(i) = i;
-        }
-        addNodeSet(db, an);
-    }
+//     {
+//         NodeSet an;
+//         an.name = "AllNodes";
+//         an.nodes.resize(xyz_coord.size());
+//         for(i = 0; i < xyz_coord.size(); i++){
+//             an.nodes.at(i) = i;
+//         }
+//         addNodeSet(db, an);
+//     }
 
-    {
-        ElementSet ae;
-        ae.name = "AllElements";
-        ae.elements.resize(elements.size());
-        for(i = 0; i < elements.size(); i++){
-            ae.elements.at(i) = i;
-        }
-        addElementSet(db, ae);
-    }
+//     {
+//         ElementSet ae;
+//         ae.name = "AllElements";
+//         ae.elements.resize(elements.size());
+//         for(i = 0; i < elements.size(); i++){
+//             ae.elements.at(i) = i;
+//         }
+//         addElementSet(db, ae);
+//     }
 
-    {
-        GFE::Material mat;
-        mat.name = "Mat-1";
-        addMaterial(db, mat);
+//     {
+//         GFE::Material mat;
+//         mat.name = "Mat-1";
+//         addMaterial(db, mat);
 
-        vector<int> ele_mat;
-        ele_mat.resize(elements.size(), 0);
-        addElementAttribute(db, "Material", ele_mat);
-    }
+//         vector<int> ele_mat;
+//         ele_mat.resize(elements.size(), 0);
+//         addElementAttribute(db, "Material", ele_mat);
+//     }
 
-    {
-        PropertySolid prop;
-        prop.name = "Prop-1";
-        prop.id = 0;
-        prop.elset_name = "AllElements";
-        addProperty(db, &prop);
+//     {
+//         PropertySolid prop;
+//         prop.name = "Prop-1";
+//         prop.id = 0;
+//         prop.elset_name = "AllElements";
+//         addProperty(db, &prop);
 
-        vector<int> ele_prop = {0};
-        addElementAttribute(db, "Property", ele_prop);
-    }
+//         vector<int> ele_prop = {0};
+//         addElementAttribute(db, "Property", ele_prop);
+//     }
 
-    return true;
-}
+//     return true;
+// }
 
-bool asb_opt_manager::write_disp2db(std::shared_ptr<GFE::DB> db, int frame){
-    using namespace GFE;
-    int i = 0;
+// bool asb_opt_manager::write_disp2db(std::shared_ptr<GFE::DB> db, int frame){
+//     using namespace GFE;
+//     int i = 0;
 
-    {
-        vector<data_t> node_U, node_V, node_W;
-        node_U.resize(xyz_coord.size());
-        node_V.resize(xyz_coord.size());
-        node_W.resize(xyz_coord.size());
-        string nset = "AllNodes";
-        for(i = 0; i < xyz_coord.size(); i++){
-            node_U.at(i) = uvw_ans[3 * i];
-            node_V.at(i) = uvw_ans[3 * i + 1];
-            node_W.at(i) = uvw_ans[3 * i + 2];
-        }
+//     {
+//         vector<data_t> node_U, node_V, node_W;
+//         node_U.resize(xyz_coord.size());
+//         node_V.resize(xyz_coord.size());
+//         node_W.resize(xyz_coord.size());
+//         string nset = "AllNodes";
+//         for(i = 0; i < xyz_coord.size(); i++){
+//             node_U.at(i) = uvw_ans[3 * i];
+//             node_V.at(i) = uvw_ans[3 * i + 1];
+//             node_W.at(i) = uvw_ans[3 * i + 2];
+//         }
 
-        FO::SetData(db, frame, "U U1", nset, node_U);
-        FO::SetData(db, frame, "U U2", nset, node_V);
-        FO::SetData(db, frame, "U U3", nset, node_W);
-        FO::AddFrame(db, 1.0 * frame, true);
-    }
+//         FO::SetData(db, frame, "U U1", nset, node_U);
+//         FO::SetData(db, frame, "U U2", nset, node_V);
+//         FO::SetData(db, frame, "U U3", nset, node_W);
+//         FO::AddFrame(db, 1.0 * frame, true);
+//     }
 
-    return true;
-}
+//     return true;
+// }
