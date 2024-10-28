@@ -1,48 +1,68 @@
-#ifndef ASSEMBLE_H
-#define ASSEMBLE_H
 #include <vector>
 #include <iostream>
 #include <string.h>
 #include <mkl.h>
+#include <fstream>
+#include <stdio.h>
 #include "solver.h"
 #include "P9SF_ele.h"
+#include "mesh.h"
+#include "read.h"
+
+#ifndef ASSEMBLE_H
+#define ASSEMBLE_H
 
 class asb_manager
 {
 public:
     // problem information
     // std::string inp_file_name;
+    double C2 = 8e7;
+    double C1 = 2E5;
     // work matrix
     SparseMatrix K_mat;
     double* Fint;
     double* Fout;
     // work information
+    double P_in;
     std::vector<P9SF> elements;
     double* xy_coord;
-    std::vector<std::pair<std::string,std::string>> mat_map;
     std::vector<Material> Mater_lib;
     int typenode_num[3];
 
-    std::vector<int> inlet_node;
-    std::vector<int> outlet_node;
+    std::vector<set> Nset;
+    std::vector<set> ELset;
+
+    std::vector<std::pair<int,int>> inlet_ele;
+    std::vector<std::pair<int,int>> outlet_ele;
     std::vector<int> wall_node;
+    std::vector<int> face_node;
     // solved answer
     double* uvtp_ans;
 
-    std::vector<std::pair<int,double>> sub_list;
+    double fsinterval;
+    std::vector<double> ifw;
+	std::vector<double> ofw;
 
 // public:
 
     asb_manager(/* std::string file_name */){
         // inp_file_name = file_name;
+        P_in = 0.01;
         xy_coord = nullptr;
         Fint = nullptr;
         uvtp_ans = nullptr;
         Fout = nullptr;
     }
 
+    /// @brief read *.inp file
+    /// @param file_stream *.inp file stream
+    void read_manager(std::ifstream &file_stream);
+
     /// @brief initial elements informations
     void init_ele();
+
+    void init_mesh();
 
     /// @brief initial the boudary conditions
     // void init_bnd();
@@ -65,12 +85,12 @@ public:
     /// @param name Nset's or ELset's name
     /// @param mode Fine Nset -> "N" or ELset -> "EL", default "N"
     /// @return set's position (set*)
-    // set* whereset(const std::string &name, const char* mode);
+    set* whereset(const std::string &name, const char* mode);
 
     /// @brief find the Material's position whose name is ${name}
     /// @param name Material's name
     /// @return Material's position (Material*)
-    // Material* whereset(const std::string &name);
+    Material* whereset(const std::string &name);
 
     /// @brief get the row/col of this point's U/V/T/P value in the global stiffness matrix
     /// @param nodetag point tag
@@ -81,10 +101,17 @@ public:
     /// @brief modify the K_{ij} to add the boundary conditions
     void addboundry();
 
-    void solve();
+    /// @brief solve the answer with single step.
+    /// @return if true, the answer astringency to the real answer
+    bool solve();
 
     /// @brief initial the symbolic Stiffness
     void init_K_symbolic();
+
+    void get_face(int m, int x_numele, int y_numele);
+
+    /// @brief write answer to *.out file
+    void write(std::string file_name = "demo");
 
     ~asb_manager(){
         delete[] xy_coord; xy_coord = nullptr;

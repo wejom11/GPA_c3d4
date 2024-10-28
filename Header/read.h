@@ -1,8 +1,10 @@
 #include <string.h>
+#include <string>
 #include <fstream>
 #include <vector>
 #include <math.h>
-#include "c3d4_ele.h"
+// #include "c3d4_ele.h"
+#include "P9SF_ele.h"
 #ifndef READ_H
 #define READ_H
 
@@ -31,7 +33,8 @@ std::string read_coord(std::ifstream &file_stream, std::vector<double*> &xyz_c);
 /// @param file_stream *.inp file name
 /// @param eles c3d4 elements sets
 /// @return last line string where program exit
-std::string read_Element(std::ifstream &file_stream, std::vector<c3d4> &eles);
+// std::string read_Element(std::ifstream &file_stream, std::vector<c3d4> &eles);
+std::string read_Element(std::ifstream &file_stream, std::vector<P9SF> &eles);
 
 /// @brief read node sets
 /// @param file_stream *.inp file name

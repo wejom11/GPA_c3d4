@@ -28,7 +28,19 @@ void P9SF::set_fs(bool is_f){
     }
 }
 
-void P9SF::set_nval(int* ntag, double* xyz, double* uvtp, int* tn_num){
+void P9SF::set_hs(bool is_heatsource){
+    is_hs = is_heatsource;
+    if(is_hs){
+        if(mat){
+            mat->beta /= 2;
+        }
+        else{
+            printf("ERROR: material not exist!");
+        }
+    }
+};
+
+void P9SF::set_nval(const int* ntag, double* xyz, double* uvtp, int* tn_num){
     int i = 0;
     int fst_p = tn_num[0] * 4;
     int snd_p = tn_num[0] * 4 + tn_num[1] * 3;
@@ -63,19 +75,62 @@ void P9SF::set_nval(int* ntag, double* xyz, double* uvtp, int* tn_num){
     }
 };
 
-void P9SF::get_N_Np(double N[9 * 9], double Np[4 * 9], double weight[9]){
-    double Gp[18] = {-sqrt(0.6),-sqrt(0.6),    -sqrt(0.6),0,   -sqrt(0.6),sqrt(0.6),
-                     0         ,-sqrt(0.6),    0         ,0,   0         ,sqrt(0.6),
-                     sqrt(0.6) ,-sqrt(0.6),    sqrt(0.6) ,0,   sqrt(0.6) ,sqrt(0.6)};
+void P9SF::get_Gp(double* Gp, double* weight){
+    int i = 0;
+    if(GaussIntorder == 3){
+        double eGp[3]{-sqrt(0.6), 0, sqrt(0.6)};
+        double eweight[3]{5.0/9, 8.0/9, 5.0/9};
+        for(i = 0; i < 3; i++){
+            Gp[i] = eGp[i];
+            weight[i] = eweight[i];
+        }
+    }
+    else if(GaussIntorder == 4){
+        double eGp[4]{-0.8611363, -0.3399810, 0.3399810, 0.8611363};
+        double eweight[4]{0.3478548, 0.6521452, 0.6521452, 0.3478548};
+        for(i = 0; i < 4; i++){
+            Gp[i] = eGp[i];
+            weight[i] = eweight[i];
+        }
+    }
+    else if(GaussIntorder == 5){
+        double eGp[5]{-0.9061798, -0.5384693, 0, 
+                           0.5384693, 0.9061798};
+        double eweight[5]{0.2369269, 0.4786287, 0.5688889, 
+                               0.4786287, 0.2369269};
+        for(i = 0; i < 5; i++){
+            Gp[i] = eGp[i];
+            weight[i] = eweight[i];
+        }
+    }
+    else if(GaussIntorder == 6){
+        double eGp[6]{-0.93246951, -0.66120939, -0.23861919,
+                            0.23861919,  0.66120939,  0.93246951};
+        double eweight[6]{0.17132449, 0.36076157, 0.46791393,
+                               0.46791393, 0.36076157, 0.17132449};
+        for(i = 0; i < 6; i++){
+            Gp[i] = eGp[i];
+            weight[i] = eweight[i];
+        }
+    }
+    else{
+        printf("ERROR: Gauss Integration Order %i hasn't supported yet!\n", GaussIntorder);
+    }
+};
+
+void P9SF::get_N_Np(double* N, double* Np, double* weight){
+    double* Gp = new double[GaussIntorder];
+    double* wei1d = new double[GaussIntorder];
+    get_Gp(Gp, wei1d);
+
     int kk[9 * 2] = { 0, 0,  2, 0,  2,2, 
                       0, 2,  1, 0,  2,1,
                       1, 2,  0, 1,  1,1};
     int kk_2o[4 * 2] = { 0, 0,  1, 0,  1, 1,  0, 1};
-    double wei1d[3] = {5.0/9.0, 8.0/9.0, 5.0/9.0};
 
     int ROW_I = 0, ROW_Ip = 0;
-    for (int i = 0; i < 9; i++){
-        double xi = Gp[2 * i], eta = Gp[2 * i + 1];
+    for (int i = 0; i < GaussIntorder * GaussIntorder; i++){
+        double xi = Gp[i / GaussIntorder], eta = Gp[i % GaussIntorder];
         double xi_pow2 = xi * xi;
         double eta_pow2 = eta * eta;
         ROW_I = 9 * i;
@@ -93,25 +148,26 @@ void P9SF::get_N_Np(double N[9 * 9], double Np[4 * 9], double weight[9]){
         for (int j = 0; j < 4; j++){
             Np[ROW_Ip + j] = xi_1d_2o[kk_2o[2*j]] * eta_1d_2o[kk_2o[2*j + 1]];
         }
+
+        weight[i] = wei1d[i / GaussIntorder] * wei1d[i % GaussIntorder];
     }
 
-    for(int i = 0; i < 9; i++){
-        weight[i] = wei1d[i/3] * wei1d[i%3];
-    }
+    delete[] Gp; Gp = nullptr;
+    delete[] wei1d; wei1d = nullptr;
 };
 
-void P9SF::get_N(double N[9 * 9], double weight[9]){
-    double Gp[18] = {-sqrt(0.6),-sqrt(0.6),    -sqrt(0.6),0,   -sqrt(0.6),sqrt(0.6),
-                     0         ,-sqrt(0.6),    0         ,0,   0         ,sqrt(0.6),
-                     sqrt(0.6) ,-sqrt(0.6),    sqrt(0.6) ,0,   sqrt(0.6) ,sqrt(0.6)};
+void P9SF::get_N(double* N, double* weight){
+    double* Gp = new double[GaussIntorder];
+    double* wei1d = new double[GaussIntorder];
+    get_Gp(Gp, wei1d);
+
     int kk[9 * 2] = { 0, 0,  2, 0,  2,2, 
                       0, 2,  1, 0,  2,1,
                       1, 2,  0, 1,  1,1};
-    double wei1d[3] = {5.0/9.0, 8.0/9.0, 5.0/9.0};
 
     int ROW_I = 0;
-    for (int i = 0; i < 9; i++){
-        double xi = Gp[2 * i], eta = Gp[2 * i + 1];
+    for (int i = 0; i < GaussIntorder * GaussIntorder; i++){
+        double xi = Gp[i / GaussIntorder], eta = Gp[i % GaussIntorder];
         double xi_pow2 = xi * xi;
         double eta_pow2 = eta * eta;
         ROW_I = 9 * i;
@@ -122,28 +178,29 @@ void P9SF::get_N(double N[9 * 9], double weight[9]){
         for (int j = 0; j < 9; j++){
             N[ROW_I + j] = xi_1d_3o[kk[2*j]] * eta_1d_3o[kk[2*j + 1]];
         }
+
+        weight[i] = wei1d[i / GaussIntorder] * wei1d[i % GaussIntorder];
     }
 
-    for(int i = 0; i < 9; i++){
-        weight[i] = wei1d[i/3] * wei1d[i%3];
-    }
+    delete[] Gp; Gp = nullptr;
+    delete[] wei1d; wei1d = nullptr;
 };
 
-void P9SF::get_Ndl(double Ndl[9 * 9 * 2]){
-    double Gp[18] = {-sqrt(0.6),-sqrt(0.6),    -sqrt(0.6),0,   -sqrt(0.6),sqrt(0.6),
-                    0         ,-sqrt(0.6),    0         ,0,   0         ,sqrt(0.6),
-                    sqrt(0.6) ,-sqrt(0.6),    sqrt(0.6) ,0,   sqrt(0.6) ,sqrt(0.6)};
-    int kk[9 * 2] = { 0, 0,  2, 0,  2,2, 
-                      0, 2,  1, 0,  2,1,
-                      1, 2,  0, 1,  1,1};
+void P9SF::get_Ndl(double* Ndl){
+    double* Gp = new double[GaussIntorder];
+    double* wei1d = new double[GaussIntorder];
+    get_Gp(Gp, wei1d);
 
-    int ROW_I = 0, ROW_Ip = 0;
-    for (int i = 0; i < 9; i++){
-        double xi = Gp[2 * i], eta = Gp[2 * i + 1];
+    int kk[9 * 2] = { 0, 0,  2, 0,  2, 2, 
+                      0, 2,  1, 0,  2, 1,
+                      1, 2,  0, 1,  1, 1};
+
+    int ROW_I = 0;
+    for (int i = 0; i < GaussIntorder * GaussIntorder; i++){
+        double xi = Gp[i / GaussIntorder], eta = Gp[i % GaussIntorder];
         double xi_pow2 = xi * xi;
         double eta_pow2 = eta * eta;
         ROW_I = 18 * i;
-        ROW_Ip = 8 * i;
 
         double xi_1d_3o[3] = {(xi_pow2 - xi) / 2, 1 - xi_pow2, (xi_pow2 + xi) / 2};
         double xidl_3o[3] = {xi - 0.5, - 2*xi, xi + 0.5};
@@ -154,10 +211,13 @@ void P9SF::get_Ndl(double Ndl[9 * 9 * 2]){
             Ndl[ROW_I + 2*j] = xidl_3o[kk[2*j]] * eta_1d_3o[kk[2*j + 1]];
             Ndl[ROW_I + 2*j + 1] = xi_1d_3o[kk[2*j]] * etadl_3o[kk[2*j + 1]];
         }
-    }    
+    }
+
+    delete[] Gp; Gp = nullptr;
+    delete[] wei1d; wei1d = nullptr;
 };
 
-void P9SF::get_Ndx(double Ndx[9 * 9 * 2], double Det[9]){
+void P9SF::get_Ndx(double* Ndx, double* Det){
     get_Ndl(Ndx);
     double J[4];
     double val = 0.0;
@@ -166,7 +226,7 @@ void P9SF::get_Ndx(double Ndx[9 * 9 * 2], double Det[9]){
     int INTP = 0;
     int ipiv[2]{0};
 
-    for(int i = 0; i < 9; i++){
+    for(int i = 0; i < GaussIntorder * GaussIntorder; i++){
         INTP = 18 * i;
         for(int j = 0; j < 2; j++){
             for(int k = 0; k < 2; k++){
@@ -193,11 +253,12 @@ void P9SF::get_Ndx(double Ndx[9 * 9 * 2], double Det[9]){
     }
 };
 
-void P9SF::get_UVTP_field(double UV_fld[9 * 2], double T_fld[9], double P_fld[9], const double N[9 * 9], const double Np[9 * 4]){
+void P9SF::get_UVTP_field(double* UV_fld, double* T_fld, double* P_fld,
+                          const double* N, const double* Np){
     int i = 0, j = 0, ROW_I = 0, ROW_NI = 0, ROW_NpI;
     double val_u = 0., val_v = 0., val_t = 0., val_p = 0.;
 
-    for(i = 0; i < 9; i++){
+    for(i = 0; i < GaussIntorder * GaussIntorder; i++){
         ROW_I = 2 * i;
         ROW_NI = 9 * i;
         ROW_NpI = 4 * i;
@@ -222,11 +283,11 @@ void P9SF::get_UVTP_field(double UV_fld[9 * 2], double T_fld[9], double P_fld[9]
     }
 };
 
-void P9SF::get_UVTP_field(double T_fld[9], const double N[9 * 9]){
+void P9SF::get_UVTP_field(double* T_fld, const double* N){
     int i = 0, j = 0, ROW_I = 0;
     double val_t = 0.;
 
-    for(i = 0; i < 9; i++){
+    for(i = 0; i < GaussIntorder * GaussIntorder; i++){
         ROW_I = 9 * i;
 
         val_t = 0.;
@@ -237,12 +298,12 @@ void P9SF::get_UVTP_field(double T_fld[9], const double N[9 * 9]){
     }
 }
 
-void P9SF::get_UVTdx_field(double UVdx_fld[9 * 2 * 2], double Tdx_fld[9 * 2], const double Ndx[9 * 9 * 2]){
+void P9SF::get_UVTdx_field(double* UVdx_fld, double* Tdx_fld, const double* Ndx){
     int i = 0, j = 0, ROW_I = 0, ROW_NI = 0, ROW_NpI;
     double val_udx = 0., val_vdx = 0., val_tdx = 0., val_pdx = 0.,
            val_udy = 0., val_vdy = 0., val_tdy = 0., val_pdy = 0.;
 
-    for(i = 0; i < 9; i++){
+    for(i = 0; i < GaussIntorder * GaussIntorder; i++){
         ROW_I = 2 * 2 * i;
         ROW_NI = 2 * 9 * i;
         ROW_NpI = 2 * 4 * i;
@@ -270,11 +331,11 @@ void P9SF::get_UVTdx_field(double UVdx_fld[9 * 2 * 2], double Tdx_fld[9 * 2], co
     }
 };
 
-void P9SF::get_UVTdx_field(double Tdx_fld[9 * 2], const double Ndx[9 * 9 * 2]){
+void P9SF::get_UVTdx_field(double* Tdx_fld, const double* Ndx){
     int i = 0, j = 0, ROW_I = 0, ROW_NI = 0;
     double val_tdx = 0., val_tdy = 0.;
 
-    for(i = 0; i < 9; i++){
+    for(i = 0; i < GaussIntorder * GaussIntorder; i++){
         ROW_I = 2 * i;
         ROW_NI = 2 * 9 * i;
 
@@ -289,9 +350,9 @@ void P9SF::get_UVTdx_field(double Tdx_fld[9 * 2], const double Ndx[9 * 9 * 2]){
     }
 };
 
-void P9SF::get_Fint_f(double F[31], const double N[9 * 9], const double UV_fld[9 * 2], const double UVdx_fld[9 * 2 * 2],
-                      const double T_fld[9], const double Tdx_fld[9 * 2], const double P_fld[9], const double Np[9 * 4], 
-                      const double Ndx[9 * 9 * 2], const double Det[9], const double weight[9]){
+void P9SF::get_Fint_f(double F[31], const double* N, const double* UV_fld, const double* UVdx_fld,
+                      const double* T_fld, const double* Tdx_fld, const double* P_fld, const double* Np, 
+                      const double* Ndx, const double* Det, const double* weight){
     int i = 0, j = 0, ROW_N = 0, /* ROW_Np = 0, */ I2, I4, ROW_Ndx;
     double rho = this->mat->rho;
     double alpha = this->mat->alpha;
@@ -307,7 +368,7 @@ void P9SF::get_Fint_f(double F[31], const double N[9 * 9], const double UV_fld[9
         F[i] = 0.;
     }
 
-    for(i = 0; i < 9; i++){ // Guass integration points
+    for(i = 0; i < GaussIntorder * GaussIntorder; i++){ // Guass integration points
         ROW_N = 9 * i;
         ROW_Ndx = 18 * i;
         I2 = 2 * i;
@@ -345,9 +406,9 @@ void P9SF::get_Fint_f(double F[31], const double N[9 * 9], const double UV_fld[9
     }
 };
 
-void P9SF::get_K_f(double K[31][31], const double N[9 * 9], const double UV_fld[9 * 2], const double UVdx_fld[9 * 2 * 2],
-                      const double T_fld[9], const double Tdx_fld[9 * 2], const double P_fld[9], const double Np[9 * 4], 
-                      const double Ndx[9 * 9 * 2], const double Det[9], const double weight[9]){
+void P9SF::get_K_f(double K[31][31], const double* N, const double* UV_fld, const double* UVdx_fld,
+                   const double* T_fld, const double* Tdx_fld, const double* P_fld, const double* Np, 
+                   const double* Ndx, const double* Det, const double* weight){
     int i = 0, j = 0, k = 0, m = 0, n = 0,
         ROW_N = 0, /* ROW_Np = 0, */ I2, I4, ROW_Ndx,
         J4, K4, J3, K3;
@@ -364,7 +425,7 @@ void P9SF::get_K_f(double K[31][31], const double N[9 * 9], const double UV_fld[
         }
     }
 
-    for(i = 0; i < 9; i++){ // Gauss integration points
+    for(i = 0; i < GaussIntorder * GaussIntorder; i++){ // Gauss integration points
         ROW_N = 9 * i;
         I4 = 4 * i;
         ROW_Ndx = 18 * i;
@@ -489,8 +550,8 @@ void P9SF::get_K_f(double K[31][31], const double N[9 * 9], const double UV_fld[
 
 };
 
-void P9SF::get_Fint_s(double F[9], const double N[9 * 9], const double T_fld[9], const double Tdx_fld[9 * 2], 
-                   const double Ndx[9 * 9 * 2], const double Det[9], const double weight[9]){
+void P9SF::get_Fint_s(double F[9], const double* N, const double* T_fld, const double* Tdx_fld, 
+                      const double* Ndx, const double* Det, const double* weight){
     int i = 0, j = 0 ,ROW_N = 0, ROW_Ndx = 0, I2 = 0;
 
     double alpha = this->mat->alpha;
@@ -501,7 +562,7 @@ void P9SF::get_Fint_s(double F[9], const double N[9 * 9], const double T_fld[9],
         F[i] = 0.;
     }
 
-    for(i = 0; i < 9; i++){ // Gauss integration points
+    for(i = 0; i < GaussIntorder * GaussIntorder; i++){ // Gauss integration points
         ROW_N = 9 * i;
         ROW_Ndx = 18 * i;
         I2 = 2 * i;
@@ -513,8 +574,8 @@ void P9SF::get_Fint_s(double F[9], const double N[9 * 9], const double T_fld[9],
     }
 }
 
-void P9SF::get_K_s(double K[9][9], const double N[9 * 9], const double T_fld[9], const double Tdx_fld[9 * 2], 
-                   const double Ndx[9 * 9 * 2], const double Det[9], const double weight[9]){
+void P9SF::get_K_s(double K[9][9], const double* N, const double* T_fld, const double* Tdx_fld, 
+                   const double* Ndx, const double* Det, const double* weight){
     int i = 0,     j = 0,       k = 0,
         ROW_N = 0, ROW_Ndx = 0, I2 = 0;
 
@@ -528,7 +589,7 @@ void P9SF::get_K_s(double K[9][9], const double N[9 * 9], const double T_fld[9],
         }
     }
 
-    for(i = 0; i < 9; i++){ // Gauss integration points
+    for(i = 0; i < GaussIntorder * GaussIntorder; i++){ // Gauss integration points
         ROW_N = 9 * i;
         ROW_Ndx = 18 * i;
 
@@ -543,10 +604,17 @@ void P9SF::get_K_s(double K[9][9], const double N[9 * 9], const double T_fld[9],
 }
 
 void P9SF::KF_f(double K[31][31], double F[31]){
-    double N[9*9]{0},          Np[9*4]{0},      Ndx[9*9*2]{0},
-           uv_fld[9*2]{0},     t_fld[9]{0},     p_fld[9]{0},
-           uvdx_fld[9*2*2]{0}, tdx_fld[9*2]{0}, pdx_fld[9*2]{0},
-           determinate[9]{0},  weightness[9]{0};
+    int int_num = GaussIntorder * GaussIntorder;
+    double* N = new double[int_num*9]{0};
+    double* Np = new double[int_num*4]{0};
+    double* Ndx = new double[int_num*9*2]{0};
+    double* uv_fld = new double[int_num*2]{0};
+    double* t_fld = new double[int_num]{0};
+    double* p_fld = new double[int_num]{0};
+    double* uvdx_fld = new double[int_num*2*2]{0};
+    double* tdx_fld = new double[int_num*2]{0};
+    double* determinate = new double[int_num]{0};
+    double* weightness = new double[int_num]{0};
 
     get_N_Np(N,Np,weightness);
     get_Ndx(Ndx, determinate);
@@ -558,11 +626,26 @@ void P9SF::KF_f(double K[31][31], double F[31]){
     get_K_f(K, N, uv_fld, uvdx_fld, t_fld, tdx_fld, p_fld, Np, Ndx,
             determinate, weightness);
 
+    delete[] N; N = nullptr;
+    delete[] Np; Np = nullptr;
+    delete[] Ndx; Ndx = nullptr;
+    delete[] uv_fld; uv_fld = nullptr;
+    delete[] t_fld; t_fld = nullptr;
+    delete[] p_fld; p_fld = nullptr;
+    delete[] uvdx_fld; uvdx_fld = nullptr;
+    delete[] tdx_fld; tdx_fld = nullptr;
+    delete[] determinate; determinate = nullptr;
+    delete[] weightness; weightness = nullptr;
 };
 
 void P9SF::KF_s(double K[9][9], double F[9]){
-    double N[9*9]{0},       Ndx[9*9*2]{0},      t_fld[9]{0},
-           tdx_fld[9*2]{0}, determinate[9]{0},  weightness[9]{0};
+    int int_num = GaussIntorder * GaussIntorder;
+    double* N = new double[int_num*9]{0};
+    double* Ndx = new double[int_num*9*2]{0};
+    double* t_fld = new double[int_num]{0};
+    double* tdx_fld = new double[int_num*2]{0};
+    double* determinate = new double[int_num]{0};
+    double* weightness = new double[int_num]{0};
 
     get_N(N, weightness);
     get_Ndx(Ndx, determinate);
@@ -572,8 +655,169 @@ void P9SF::KF_s(double K[9][9], double F[9]){
     get_Fint_s(F ,N, t_fld, tdx_fld, Ndx, determinate, weightness);
     get_K_s(K, N, t_fld, tdx_fld, Ndx, determinate, weightness);
 
+    delete[] N; N = nullptr;
+    delete[] Ndx; Ndx = nullptr;
+    delete[] t_fld; t_fld = nullptr;
+    delete[] tdx_fld; tdx_fld = nullptr;
+    delete[] determinate; determinate = nullptr;
+    delete[] weightness; weightness = nullptr;
 }
 
 int P9SF::at_Nodetag(int index){
     return Nodetag[index];
+};
+
+void P9SF::get_Fout(double* Fo, int line, int* index){
+    int face[3];
+    std::vector<double> n;
+    double Ndl[54]{0}, N[27]{0}, Np[12]{0};
+    double UVdx_fld[12]{0}, P_fld[3]{0}, T_fld[3]{0};
+    double tau[12];
+    double J[4]{0};
+    double val = 0.;
+
+    double c1 = mat->c1;
+    double c2 = mat->c2;
+
+    face[0] = line;
+    face[1] = line + 4;
+    face[2] = line % 4 + 1;
+    n = get_normal(XY.at(face[0] - 1), XY.at(face[2] - 1));
+
+    std::vector<double> Gp;
+    double weight[3] = {5.0/9, 8.0/9, 5.0/9};
+    int kk[9 * 2] = { 0, 0,  2, 0,  2, 2, 
+                    0, 2,  1, 0,  2, 1,
+                    1, 2,  0, 1,  1, 1};
+    int kk_2d[4 * 2] = { 0, 0,  1, 0,  1, 1,  0, 1};
+
+    if(line == 1){
+        Gp = {-sqrt(0.6), -1, 0, -1, sqrt(0.6), -1};
+    }
+    else if(line == 2){
+        Gp = {1, -sqrt(0.6), 1, 0, 1, sqrt(0.6)};
+    }
+    else if(line == 3){
+        Gp = {-sqrt(0.6), 1, 0, 1, sqrt(0.6), 1};
+    }
+    else if(line == 4){
+        Gp = {-1, -sqrt(0.6), -1, 0, -1, sqrt(0.6)};
+    }
+
+    int ROW_I = 0;
+    for (int i = 0; i < 3; i++){
+        double xi = Gp[2*i], eta = Gp[2*i + 1];
+        double xi_pow2 = xi * xi;
+        double eta_pow2 = eta * eta;
+        ROW_I = 18 * i;
+
+        double xi_1d_3o[3] = {(xi_pow2 - xi) / 2, 1 - xi_pow2, (xi_pow2 + xi) / 2};
+        double xidl_3o[3] = {xi - 0.5, - 2*xi, xi + 0.5};
+        double eta_1d_3o[3] = {(eta_pow2 - eta) / 2, 1 - eta_pow2, (eta_pow2 + eta) / 2};
+        double etadl_3o[3] = {eta - 0.5, - 2*eta, eta + 0.5};
+
+        for (int j = 0; j < 9; j++){
+            Ndl[ROW_I + 2*j] = xidl_3o[kk[2*j]] * eta_1d_3o[kk[2*j + 1]];
+            Ndl[ROW_I + 2*j + 1] = xi_1d_3o[kk[2*j]] * etadl_3o[kk[2*j + 1]];
+        }
+
+        ROW_I = 9 * i;
+        for(int j = 0; j < 9; j++){
+            N[ROW_I + j] = xi_1d_3o[kk[2*j]] * eta_1d_3o[kk[2*j + 1]];
+        }
+
+        double xi_1d_2o[2] = {(1 - xi)/2, (1 + xi)/2};
+        double eta_1d_2o[2] = {(1 - eta)/2, (1 + eta)/2};
+
+        ROW_I = 4 * i;
+        for(int j = 0; j < 4; j++){
+            Np[ROW_I + j] = xi_1d_2o[kk_2d[2*j]] * eta_1d_2o[kk_2d[2*j + 1]];
+        }
+        
+    }
+
+    int info = 0;
+    int INTP = 0;
+    int ipiv[2]{0};
+
+    for(int i = 0; i < 3; i++){
+        INTP = 18 * i;
+        for(int j = 0; j < 2; j++){
+            for(int k = 0; k < 2; k++){
+                val = 0.0;
+                for(int m = 0; m < 9; m++){
+                    val += Ndl[INTP + 2*m + j] * XY.at(m)[k];
+                }
+
+                J[2*j + k] = val;
+            }
+        }
+
+        LAPACKE_dgetrf(LAPACK_ROW_MAJOR, 2, 2, J, 2, ipiv);
+
+        for(int j = 0; j < 9; j++){
+            info = LAPACKE_dgetrs(LAPACK_ROW_MAJOR, 'N', 2, 1, J, 2, ipiv, &Ndl[INTP + 2*j], 1);
+
+            if(info != 0){
+                printf("ERROR: calculating Ndx failed!\n");
+            }
+        }
+    }
+
+    int ROW_NI = 0, ROW_NTI;
+    double val_udx = 0., val_vdx = 0., val_udy = 0., val_vdy = 0.,
+           val_p = 0., val_t = 0.;
+
+    for(int i = 0; i < 3; i++){
+        ROW_I = 2 * 2 * i;
+        ROW_NI = 2 * 9 * i;
+        ROW_NTI = 9 * i;
+
+        val_udx = 0.;
+        val_udy = 0.;
+        val_vdx = 0.;
+        val_vdy = 0.;
+        val_t = 0.;
+        for(int j = 0; j < 9; j++){
+            val_udx += Ndl[ROW_NI + 2*j] * UV.at(j)[0];
+            val_udy += Ndl[ROW_NI + 2*j + 1] * UV.at(j)[0];
+            val_vdx += Ndl[ROW_NI + 2*j] * UV.at(j)[1];
+            val_vdy += Ndl[ROW_NI + 2*j + 1] * UV.at(j)[1];
+            val_t += N[ROW_NTI + j] * *(T.at(j));
+        }
+        UVdx_fld[ROW_I] = val_udx;
+        UVdx_fld[ROW_I + 1] = val_udy;
+        UVdx_fld[ROW_I + 2] = val_vdx;
+        UVdx_fld[ROW_I + 3] = val_vdy;
+        T_fld[i] = val_t;
+
+        val_p = 0.;
+        for(int j = 0; j < 4; j++){
+            val_p += Np[ROW_I + j] * *(P.at(j));
+        }
+        P_fld[i] = val_p;
+    }
+
+    for(int i = 0; i < 3; i++){
+        ROW_I = 4 * i;
+        double vis = c1 * T_fld[i] + c2;
+        tau[ROW_I] = 2 * vis * UVdx_fld[ROW_I];
+        tau[ROW_I + 1] = vis * (UVdx_fld[ROW_I + 1] + UVdx_fld[ROW_I + 2]);
+        tau[ROW_I + 2] = tau[ROW_I + 1];
+        tau[ROW_I + 3] = 2 * vis * UVdx_fld[ROW_I + 3];
+    }
+
+    double val_fx, val_fy;
+    for(int i = 0; i < 3; i++){
+        val_fx = 0.;
+        val_fy = 0.;
+        for(int j = 0; j < 3; j++){
+            val_fx += (tau[4*j]*n[0] + tau[4*j + 1]*n[1] + P_fld[j]) * N[9*j + face[i] - 1] * weight[j];
+            val_fy += (tau[4*j + 2]*n[0] + tau[4*j + 3]*n[1]) * N[9*j + face[i] - 1] * weight[j];
+        }
+
+        Fo[index[i]] += val_fx * n[2] / 2;
+        Fo[index[i] + 1] += val_fy * n[2] / 2;
+    }
+
 };

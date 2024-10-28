@@ -3,10 +3,16 @@
 #include <vector>
 #include <mkl.h>
 #include <math.h>
+#include <string>
+#include "solver.h"
 
-struct Material{
+struct Material {
+    std::string name;
+    int where = 0;
+    double E = 2.1E11;
+    double mu = 0.3;
     double beta = 0.0241;
-    double alpha = 0.632185/994/4174;
+    double alpha = 0.632185 / 994 / 4174;
     double T0 = 25;
     double rho = 994;
     double c1 = -1e-5;
@@ -19,32 +25,35 @@ struct Material{
 // 8 —— 9 —— 6
 // |    |    |
 // 1 —— 5 —— 2
-class P9SF{
-private:
+class P9SF {
+public:
     bool is_fuild;
+    bool is_hs;
     int fd_ele; // freedom of this ele
-    int Nodetag[9]{0};  // the tag of 9 nodes
+    int Nodetag[9]{ 0 };  // the tag of 9 nodes
     Material* mat;
+    int GaussIntorder;
 
     std::vector<double*> XY; // Coordinate of 9 nodes
     std::vector<double*> T; // Temperanture of 9 nodes (for simplicity, call T value)
     std::vector<double*> UV; // Velocity of 9 nodes (U value or V value)
     std::vector<double*> P; // Pressure of 1-4 nodes (P value)
-public:
-    
-    P9SF(Material* mater = nullptr, bool is_fuild = true){
+
+    P9SF(Material* mater = nullptr, bool is_fuild = true) {
         this->is_fuild = is_fuild;
+        is_hs = false;
         fd_ele = is_fuild ? 31 : 9;
-        if(is_fuild){
+        if (is_fuild) {
             T.resize(9, nullptr);
             UV.resize(9, nullptr);
             P.resize(4, nullptr);
         }
-        else{
+        else {
             T.resize(9, nullptr);
         }
         XY.resize(9, nullptr);
         mat = mater;
+        GaussIntorder = 3;
     }
 
     /// @brief Determine whether the element is valid
@@ -59,34 +68,41 @@ public:
     /// @param is_f 1-fuild and 0-solid
     void set_fs(bool is_f);
 
+    void set_hs(bool is_heatsource);
+
     /// @brief add node's coordinate and T, U, V, P value to its node
     /// @param ntag the tag of 9 nodes in this element
     /// @param xyz coordinate of all nodes
     /// @param uvt_p UVTP value of all nodes
     /// @param tn_num specify the i-th_type_node num (by order: 1-st: nodes contain 
     ///               U,V,T,P; 2-nd: nodes contain U,V,T; 3-rd: nodes contain T{solid element})
-    void set_nval(int* ntag, double* xyz, double* uvtp, int* tn_num);
+    void set_nval(const int* ntag, double* xyz, double* uvtp, int* tn_num);
+
+    /// @brief get the Gauss point coordinate and the weightness
+    /// @param Gp the Gauss point coordinate
+    /// @param weight the wightness
+    void get_Gp(double* Gp, double* weight);
 
     /// @brief calculate the shape function of U,V,T value of one element with 9 Gauss points (N[9 * 9], 2-order)
     /// and the shape function of P value of element with 9 Gauss points (Np[4 * 9], 1-order)
     /// @param N the shape function of U,V,T value
     /// @param Np the shape function of P value
     /// @param weight the weightness in 9 Gauss Points
-    void get_N_Np(double N[9 * 9], double Np[9 * 4], double weight[9]);
-    
+    void get_N_Np(double* N, double* Np, double* weight);
+
     /// @brief calculate the shape function of U,V,T value of one element with 9 Gauss points (N[9 * 9], 2-order)
     /// @param N the shape function of U,V,T value
     /// @param weight the weightness in 9 Gauss Points
-    void get_N(double N[9 * 9], double weight[9]);
+    void get_N(double* N, double* weight);
 
     /// @brief calculate the derivative of shape function N against natural coordinate {\xi, \eta} in 9 Gauss Point. 
     /// @param Ndl the derivative of shape function N
-    void get_Ndl(double Ndl[9 * 9 * 2]);
+    void get_Ndl(double* Ndl);
 
     /// @brief calculate the derivative of shape function N against local coordinate {x, y} in 9 Gauss Point.
     /// @param Ndx (output) the derivative of shape function N against local coordinate
     /// @param Det (output) the determinate of Jacobian with N in 9 Gauss Points
-    void get_Ndx(double Ndx[9 * 9 * 2], double Det[9]);
+    void get_Ndx(double* Ndx, double* Det);
 
     /// @brief get U,V,T,P value field val in 9 Gauss Point {fuild version}
     /// @param UV_fld U,V field value in 9 Gauss Point
@@ -94,24 +110,24 @@ public:
     /// @param P_fld P field value in 9 Gauss Point
     /// @param N shape function
     /// @param Np P value shape function
-    void get_UVTP_field(double UV_fld[9 * 2], double T_fld[9], double P_fld[9],
-                        const double N[9 * 9], const double Np[9 * 4]);
+    void get_UVTP_field(double* UV_fld, double* T_fld, double* P_fld,
+        const double* N, const double* Np);
 
     /// @brief get U,V,T,P value field val in 9 Gauss Point {solid version}
     /// @param T_fld T field value in 9 Gauss Point
     /// @param N shape function
-    void get_UVTP_field(double T_fld[9], const double N[9 * 9]);
+    void get_UVTP_field(double* T_fld, const double* N);
 
     /// @brief get the derivative of U,V,T,P value field val in 9 Gauss Point {fuild version}
     /// @param UVdx_fld the derivative of U,V field value in 9 Gauss Point
     /// @param Tdx_fld the derivative of T field value in 9 Gauss Point
     /// @param Ndx the derivative of shape function
-    void get_UVTdx_field(double UVdx_fld[9 * 2 * 2], double Tdx_fld[9 * 2], const double Ndx[9 * 9 * 2]);
+    void get_UVTdx_field(double* UVdx_fld, double* Tdx_fld, const double* Ndx);
 
     /// @brief get the derivative of U,V,T,P value field val in 9 Gauss Point {solid version}
     /// @param Tdx_fld the derivative of T field value in 9 Gauss Point
     /// @param Ndx the derivative of shape function
-    void get_UVTdx_field(double Tdx_fld[9 * 2], const double Ndx[9 * 9 * 2]);
+    void get_UVTdx_field(double* Tdx_fld, const double* Ndx);
 
     /// @brief calculate the element load vector Fint {fluid element}
     /// @param F the element load vector
@@ -125,9 +141,9 @@ public:
     /// @param Ndx the derivative of shape function
     /// @param Det the determinate of Jacobian with N in 9 Gauss Points
     /// @param weight the weightness in 9 Gauss Points
-    void get_Fint_f(double F[31], const double N[9 * 9], const double UV_fld[9 * 2], const double UVdx_fld[9 * 2 * 2],
-                    const double T_fld[9], const double Tdx_fld[9 * 2], const double P_fld[9], const double Np[9 * 4], 
-                    const double Ndx[9 * 9 * 2], const double Det[9], const double weight[9]);
+    void get_Fint_f(double F[31], const double* N, const double* UV_fld, const double* UVdx_fld,
+        const double* T_fld, const double* Tdx_fld, const double* P_fld, const double* Np,
+        const double* Ndx, const double* Det, const double* weight);
 
     /// @brief calculate the element stiffness matrix K {fluid element}
     /// @param K the element stiffness matrix K
@@ -143,9 +159,9 @@ public:
     /// @param Npdx the derivative of P value shape function
     /// @param Det the determinate of Jacobian with N in 9 Gauss Points
     /// @param weight the weightness in 9 Gauss Points
-    void get_K_f(double K[31][31], const double N[9 * 9], const double UV_fld[9 * 2], const double UVdx_fld[9 * 2 * 2],
-                    const double T_fld[9], const double Tdx_fld[9 * 2], const double P_fld[9], const double Np[9 * 4], 
-                    const double Ndx[9 * 9 * 2], const double Det[9], const double weight[9]);
+    void get_K_f(double K[31][31], const double* N, const double* UV_fld, const double* UVdx_fld,
+        const double* T_fld, const double* Tdx_fld, const double* P_fld, const double* Np,
+        const double* Ndx, const double* Det, const double* weight);
 
     /// @brief calculate the element load vector Fint {solid element}
     /// @param F the element load vector
@@ -155,8 +171,8 @@ public:
     /// @param Ndx the derivative of shape function
     /// @param Det the determinate of Jacobian with N in 9 Gauss Points
     /// @param weight the weightness in 9 Gauss Points
-    void get_Fint_s(double F[9], const double N[9 * 9], const double T_fld[9], const double Tdx_fld[9 * 2], 
-                 const double Ndx[9 * 9 * 2], const double Det[9], const double weight[9]);
+    void get_Fint_s(double F[9], const double* N, const double* T_fld, const double* Tdx_fld,
+        const double* Ndx, const double* Det, const double* weight);
 
     /// @brief calculate the element stiffness matrix K {solid element}
     /// @param K the element stiffness matrix K
@@ -166,8 +182,8 @@ public:
     /// @param Ndx the derivative of shape function
     /// @param Det the determinate of Jacobian with N in 9 Gauss Points
     /// @param weight the weightness in 9 Gauss Points
-    void get_K_s(double K[9][9], const double N[9 * 9], const double T_fld[9], const double Tdx_fld[9 * 2], 
-                 const double Ndx[9 * 9 * 2], const double Det[9], const double weight[9]);
+    void get_K_s(double K[9][9], const double* N, const double* T_fld, const double* Tdx_fld,
+        const double* Ndx, const double* Det, const double* weight);
 
     /// @brief calculate the element stiffness matrix K and Load vector F {fluid element}
     /// @param K the element stiffness matrix K
@@ -184,7 +200,9 @@ public:
     /// @return value
     int at_Nodetag(int index);
 
-    ~P9SF(){};
+    void get_Fout(double* Fo, int line, int* index);
+
+    ~P9SF() {};
 
 };
 

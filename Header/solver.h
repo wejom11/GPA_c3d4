@@ -1,6 +1,8 @@
 #ifndef SOLVER_H
 #define SOLVER_H
 #include <stdio.h>
+#include <vector>
+#include <math.h>
 
 class SparseMatrix{
 public:
@@ -58,5 +60,19 @@ public:
 /// @attention the row/col number and SparseMatrix is one-based indexing;
 /// @return the position where this element stored in SparseMatrix.val Array.
 int match(const int row, const int col,  SparseMatrix &SPM);
+
+/// @brief fine val's position in the array, if doesn't exist, return -1.
+/// @param val val
+/// @param array array
+/// @return position
+/// @attention the array should be monotonically increasing array(Mathematically,
+///            this array must be a strictly defined set)
+int check(const int val, const std::vector<int> &array);
+
+/// @brief get the normal vector of line AB which point to the right side of AB
+/// @param ptA point A
+/// @param ptB point B
+/// @return normal vector
+std::vector<double> get_normal(double* ptA, double* ptB);
 
 #endif

@@ -1,4 +1,3 @@
-#include <stdio.h>
 #include "solver.h"
 
 void SparseMatrix::show(int row){
@@ -55,7 +54,7 @@ void pardiso_cfg::initial(int &type){
     }
 }
 
-int match(const int row, const int col,  SparseMatrix &SPM){
+int match(const int row, const int col, SparseMatrix &SPM){
     int start = SPM.row_st[row-1] - 1;
     int end = SPM.row_st[row] - 1;
     int mid = (start + end) / 2;
@@ -88,4 +87,51 @@ int match(const int row, const int col,  SparseMatrix &SPM){
     }
     
     return -1;
+};
+
+int check(const int val, const std::vector<int> &array){
+    bool done = false;
+    int front_ptr = 0;
+    int back_ptr = array.size() - 1;
+    int ptr = (front_ptr + back_ptr) / 2;
+
+    if(array.back() == val){
+        return back_ptr;
+    }
+    
+    while(!done){
+        if(array.at(ptr) == val){
+            return ptr;
+        }
+        else if(array.at(ptr) > val){
+            back_ptr = ptr;
+            ptr = (front_ptr + back_ptr) / 2;
+            if(ptr == back_ptr){
+                break;
+            }
+        }
+        else{
+            front_ptr = ptr;
+            ptr = (front_ptr + back_ptr) / 2;
+            if(ptr == front_ptr){
+                break;
+            }
+        }
+    }
+    return -1;
+    
+};
+
+std::vector<double> get_normal(double* ptA, double* ptB){
+    double x = 0., y = 0., len = 0.0;
+
+    x = ptB[0] - ptA[0];
+    y = ptB[1] - ptA[1];
+    len = sqrt(pow(x,2) + pow(y,2));
+    x = x / len;
+    y = y / len;
+
+    std::vector<double> norm = {y, -x, len};
+    return norm;
+
 };

@@ -2,7 +2,8 @@
 #include <fstream>
 #include <vector>
 #include <math.h>
-#include "c3d4_ele.h"
+// #include "c3d4_ele.h"
+#include "P9SF_ele.h"
 #include "read.h"
 
 std::string read_coord(std::ifstream &file_stream, std::vector<double*> &xyz_c){
@@ -23,18 +24,16 @@ std::string read_coord(std::ifstream &file_stream, std::vector<double*> &xyz_c){
             x = std::stod(word);
             first_wd(work_str,word);
             y = std::stod(word);
-            first_wd(work_str,word);
-            z = std::stod(word);
             if(index == xyz_c.size()){
-                xyz_c.push_back(new double[3]{x,y,z});
+                xyz_c.push_back(new double[2]{x,y});
             }
             else if(index > xyz_c.size()){
                 xyz_c.resize(index);
-                xyz_c.push_back(new double[3]{x,y,z});
+                xyz_c.push_back(new double[2]{x,y});
             }
             else{
                 if(xyz_c.at(index) == NULL){
-                    xyz_c[index] = new double[3]{x,y,z};
+                    xyz_c[index] = new double[2]{x,y};
                 }
                 else{
                     throw "Duplicate node";
@@ -45,10 +44,46 @@ std::string read_coord(std::ifstream &file_stream, std::vector<double*> &xyz_c){
     return work_str;
 }
 
-std::string read_Element(std::ifstream &file_stream, std::vector<c3d4> &eles){
+// std::string read_Element(std::ifstream &file_stream, std::vector<c3d4> &eles){
+//     std::string work_str;
+//     std::string word;
+//     int it_tag[5];
+//     bool is_done = false;
+//     do{
+//         getlmsg(file_stream,work_str);
+//         if(work_str.front() == '*'){
+//             is_done =true;
+//         }
+//         else{
+//             for (int i = 0; i < 5; i++){
+//                 first_wd(work_str,word);
+//                 it_tag[i] = std::stoi(word);
+//             }
+//             it_tag[0]--;
+//             if(it_tag[0] == eles.size()){
+//                 eles.push_back(c3d4({},{it_tag[1],it_tag[2],it_tag[3],it_tag[4]}));
+//             }
+//             else if(it_tag[0] > eles.size()){
+//                 eles.resize(it_tag[0]);
+//                 eles.push_back(c3d4({},{it_tag[1],it_tag[2],it_tag[3],it_tag[4]}));
+//             }
+//             else{
+//                 if(eles.at(it_tag[0]).Nodetag.size() == 0){
+//                     eles[it_tag[0]] = c3d4({},{it_tag[1],it_tag[2],it_tag[3],it_tag[4]});
+//                 }
+//                 else{
+//                     throw "Duplicate node";
+//                 }
+//             }
+//         }
+//     } while (!is_done);
+//     return work_str;
+// };
+
+std::string read_Element(std::ifstream &file_stream, std::vector<P9SF> &eles){
     std::string work_str;
     std::string word;
-    int it_tag[5];
+    int it_tag[9];
     bool is_done = false;
     do{
         getlmsg(file_stream,work_str);
@@ -56,21 +91,29 @@ std::string read_Element(std::ifstream &file_stream, std::vector<c3d4> &eles){
             is_done =true;
         }
         else{
-            for (int i = 0; i < 5; i++){
+            for (int i = 0; i < 9; i++){
                 first_wd(work_str,word);
                 it_tag[i] = std::stoi(word);
             }
             it_tag[0]--;
             if(it_tag[0] == eles.size()){
-                eles.push_back(c3d4({},{it_tag[1],it_tag[2],it_tag[3],it_tag[4]}));
+                eles.push_back(P9SF());
+                for(int i = 0; i < 8; i++){
+                    eles.back().Nodetag[i] = it_tag[i+1];
+                }
             }
             else if(it_tag[0] > eles.size()){
                 eles.resize(it_tag[0]);
-                eles.push_back(c3d4({},{it_tag[1],it_tag[2],it_tag[3],it_tag[4]}));
+                eles.push_back(P9SF());
+                for(int i = 0; i < 8; i++){
+                    eles.back().Nodetag[i] = it_tag[i+1];
+                }
             }
             else{
-                if(eles.at(it_tag[0]).Nodetag.size() == 0){
-                    eles[it_tag[0]] = c3d4({},{it_tag[1],it_tag[2],it_tag[3],it_tag[4]});
+                if(eles.at(it_tag[0]).Nodetag[0] == 0){
+                    for(int i = 0; i < 8; i++){
+                        eles.back().Nodetag[i] = it_tag[i+1];
+                    }
                 }
                 else{
                     throw "Duplicate node";
